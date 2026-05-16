@@ -1,37 +1,23 @@
 # JProxy Go
 
-A lightweight Go rewrite of JProxy for Sonarr/Radarr indexer query optimization.
+JProxy 的轻量级 Go 重写版本，用于 Sonarr/Radarr indexer 查询优化。 
 
-This project is intended as a direct replacement for the original Java service
-on NAS Docker deployments. It keeps the same default port, reuses the legacy UI,
-and stores mutable data in the same SQLite `jproxy.db` style database.
+**因为内存实在是太贵了，我实在买不起，就只好重写项目了**
 
-## Features
+## 致谢
+本项目基于 [LuckyPuppy514/jproxy](https://github.com/LuckyPuppy514/jproxy) 用 Go 语言重写，感谢原作者的贡献。
 
-- Sonarr/Radarr query proxy routes:
-  - `/sonarr/jackett/*`
-  - `/sonarr/prowlarr/*`
-  - `/radarr/jackett/*`
-  - `/radarr/prowlarr/*`
-- Legacy web UI served from `web-dist`
-- No-login compatibility for the legacy UI
-- Config, cache, sync, rule, title, TMDB and example management APIs
-- Sonarr/Radarr title sync
-- Sonarr/Radarr rule sync
-- TMDB title sync
-- Built-in scheduler
-- Pure-Go SQLite driver
-- Small `scratch` Docker runtime image
+## 功能特性
+- 参考原项目就好，应该都一比一地实现了
 
 ## Docker Compose
 
-For NAS deployment, mount `jproxy.db` as writable because the service updates
-config, synced titles and rules.
+NAS 部署时，需要将 `jproxy.db` 以可写方式挂载，因为服务会更新配置、同步标题和规则。
 
 ```yaml
 services:
   jproxy:
-    image: your-dockerhub-name/jproxy-go:latest
+    image: 4thhydrogen/jproxy-go:latest
     container_name: jproxy
     restart: always
     environment:
@@ -40,7 +26,7 @@ services:
       - CORE_PROXY_MIN_COUNT=6
       - JPROXY_DB_PATH=/data/jproxy.db
       - WEB_DIST_PATH=/app/web-dist
-      # Optional outbound proxy for GitHub/TMDB/etc.
+      # 可选：出站代理，记得改成你的代理地址
       # - HTTP_PROXY=http://192.168.50.12:7897
       # - HTTPS_PROXY=http://192.168.50.12:7897
     ports:
@@ -49,40 +35,28 @@ services:
       - /vol1/1000/docker/media-manager/jproxy/database/jproxy.db:/data/jproxy.db
 ```
 
-If your existing path is a directory such as:
 
-```text
-/vol1/1000/docker/media-manager/jproxy/database
-```
+## 配置项
 
-then mount the actual database file inside it:
+- `JPROXY_DB_PATH`：SQLite 数据库路径。Docker 环境默认：`/data/jproxy.db`。
+- `CORE_PROXY_ADDR`：监听地址。默认：`:8117`。
+- `CORE_PROXY_MIN_COUNT`：Sonarr 回退阈值。默认：`6`。
+- `WEB_DIST_PATH`：UI 静态资源路径。Docker 环境默认：`/app/web-dist`。
 
-```yaml
-volumes:
-  - /vol1/1000/docker/media-manager/jproxy/database/jproxy.db:/data/jproxy.db
-```
-
-## Configuration
-
-- `JPROXY_DB_PATH`: SQLite database path. Default: `/data/jproxy.db` in Docker.
-- `CORE_PROXY_ADDR`: listen address. Default: `:8117`.
-- `CORE_PROXY_MIN_COUNT`: Sonarr fallback threshold. Default: `6`.
-- `WEB_DIST_PATH`: legacy UI assets path. Default: `/app/web-dist` in Docker.
-
-## Verify Deployment
+## 验证部署
 
 ```bash
 curl http://127.0.0.1:8117/healthz
 docker logs --tail=100 jproxy
 ```
 
-Expected health response:
+健康检查预期响应：
 
 ```text
 ok
 ```
 
-## Local Development
+## 本地开发
 
 ```powershell
 Set-Location D:\Project\jproxy-main\core-proxy
@@ -90,14 +64,14 @@ $env:JPROXY_DB_PATH="D:\Project\jproxy-main\src\main\resources\database\jproxy.d
 & "C:\Program Files\Go\bin\go.exe" run ./cmd/core-proxy
 ```
 
-Run tests:
+运行测试：
 
 ```powershell
 $env:GOCACHE="$PWD\.gocache"
 & "C:\Program Files\Go\bin\go.exe" test ./...
 ```
 
-## Build Docker Locally
+## 本地构建 Docker
 
 ```bash
 docker build -t jproxy-go:local .
@@ -107,55 +81,43 @@ docker run --rm -p 8117:8117 \
   jproxy-go:local
 ```
 
-## Automatic Docker Hub Publishing
+## Docker Hub 自动发布
 
-This repository includes `.github/workflows/docker-publish.yml`.
+本仓库已配置 `.github/workflows/docker-publish.yml` 自动构建工作流。
 
-To enable automatic builds:
+启用自动构建的步骤：
 
-1. Create a Docker Hub repository, for example `your-dockerhub-name/jproxy-go`.
-2. In the GitHub repository, open `Settings -> Secrets and variables -> Actions`.
-3. Add `DOCKERHUB_USERNAME`.
-4. Add `DOCKERHUB_TOKEN`, preferably a Docker Hub access token rather than your password.
-5. Push to `main` or create a tag such as `v0.1.0`.
+1. 在 Docker Hub 创建仓库，例如 `your-dockerhub-name/jproxy-go`。
+2. 在 GitHub 仓库中，进入 `Settings -> Secrets and variables -> Actions`。
+3. 添加 `DOCKERHUB_USERNAME`。
+4. 添加 `DOCKERHUB_TOKEN`，推荐使用 Docker Hub Access Token 而非密码。
+5. 推送到 `main` 分支或创建 tag（如 `v0.1.0`）即可触发构建。
 
-The workflow publishes:
+工作流会发布以下标签：
 
-- `latest` for the default branch
-- branch tags
-- version tags such as `v0.1.0`
-- commit tags such as `sha-xxxxxxx`
+- `latest` — 默认分支最新版本
+- 分支标签
+- 版本标签，如 `v0.1.0`
+- 提交 SHA 标签，如 `sha-xxxxxxx`
 
-## NAS Update Flow
 
-After automatic publishing is enabled, updating the NAS is just:
+## 兼容性状态
 
-```bash
-cd /vol1/1000/docker/media-manager
-docker compose pull jproxy
-docker compose up -d jproxy
-```
+Go 服务目前已覆盖原有 UI 控制器使用的全部 API，以及主要的 Sonarr/Radarr indexer 代理路径。
 
-No manual file copy is needed.
+已实现：
 
-## Compatibility Status
+- indexer 查询重写和 XML 格式化
+- 规则导入/导出/保存/删除/启用/禁用/同步
+- 标题查询/删除/同步
+- TMDB 标题查询/保存/删除/同步
+- 示例查询/保存/删除
+- 系统配置查询/更新/版本/作者列表
+- 缓存清理接口
+- 免登录用户接口（`isLoginEnabled` 返回 `false`，自动跳过登录）
 
-The Go service currently covers the original controller API surface used by the
-legacy UI, plus the main Sonarr/Radarr indexer proxy paths.
+待迁移：
 
-Implemented:
+- qBittorrent/Transmission 下载器登录及自动种子/文件重命名后台任务。
+  这些功能不属于 UI 控制器 API，但存在于原 Java 服务中，如有需要应进行迁移。
 
-- indexer query rewrite and XML formatting
-- rule import/export/save/remove/enable/disable/sync
-- title query/remove/sync
-- TMDB title query/save/remove/sync
-- example query/save/remove
-- system config query/update/version/author list
-- cache clear endpoints
-- no-login user endpoints
-
-Known remaining migration area:
-
-- qBittorrent/Transmission downloader login and automatic torrent/file rename
-  background tasks. These are not part of the UI controller API, but they exist
-  in the original Java service and should be migrated if you rely on them.
