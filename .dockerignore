@@ -1,0 +1,8 @@
+.gocache
+dist
+.git
+.github
+*.exe
+*.test
+coverage.out
+testdata

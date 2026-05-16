@@ -1,0 +1,84 @@
+{
+  "name": "sonarr-three-body-problem",
+  "kind": "sonarr",
+  "indexer": "jackett",
+  "path": "/sonarr/jackett/api/v2.0/indexers/all/results/torznab/",
+  "query": "q=Three+Body+Problem&t=search&offset=0&limit=2",
+  "upstream_by_q": {
+    "Three Body Problem": "<?xml version=\"1.0\"?><rss><channel><item><title>Three Body Problem S01E02 CHS</title></item></channel></rss>",
+    "San Ti": "<?xml version=\"1.0\"?><rss><channel><item><title>San Ti S01E02 CHS</title></item></channel></rss>"
+  },
+  "config": {
+    "cleanTitleRegex": "[@\"!?`_: \\[\\]\\-\\.']",
+    "sonarrIndexerFormat": "{title} {season}{episode} {language}"
+  },
+  "sonarr_lookup": {
+    "three body problem": {
+      "TVDBID": 1,
+      "SNO": 0,
+      "MainTitle": "三体",
+      "Title": "Three Body Problem",
+      "CleanTitle": "",
+      "SeasonNumber": 0,
+      "Monitored": 0
+    }
+  },
+  "tmdb_by_tvdb": {
+    "1": [
+      {
+        "TVDBID": 1,
+        "Title": "San Ti"
+      }
+    ]
+  },
+  "sonarr_catalog": [
+    {
+      "TVDBID": 0,
+      "SNO": 0,
+      "MainTitle": "三体",
+      "Title": "Three Body Problem",
+      "CleanTitle": "three body problem",
+      "SeasonNumber": 1,
+      "Monitored": 1
+    },
+    {
+      "TVDBID": 0,
+      "SNO": 0,
+      "MainTitle": "三体",
+      "Title": "San Ti",
+      "CleanTitle": "san ti",
+      "SeasonNumber": 1,
+      "Monitored": 1
+    }
+  ],
+  "sonarr_rules": {
+    "title": [
+      {
+        "Token": "title",
+        "Priority": 0,
+        "Regex": ".*{cleanTitle}.*",
+        "Replacement": "",
+        "Offset": 0
+      }
+    ],
+    "episode": [
+      {
+        "Token": "episode",
+        "Priority": 0,
+        "Regex": "(?i).*?(E\\d+).*",
+        "Replacement": "$1",
+        "Offset": 0
+      }
+    ],
+    "language": [
+      {
+        "Token": "language",
+        "Priority": 0,
+        "Regex": "(?i).*\\b(CHS)\\b.*",
+        "Replacement": "$1",
+        "Offset": 0
+      }
+    ]
+  },
+  "expected_xml": "<?xml version=\"1.0\"?><rss><channel><item><title>三体 E02 CHS</title></item><item><title>三体 E02 CHS</title></item></channel></rss>"
+}
