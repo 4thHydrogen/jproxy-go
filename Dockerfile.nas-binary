@@ -1,9 +1,0 @@
-FROM scratch
-
-WORKDIR /app
-COPY --chmod=755 core-proxy /app/core-proxy
-COPY web-dist /app/web-dist
-COPY ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-
-EXPOSE 8117
-ENTRYPOINT ["/app/core-proxy"]
