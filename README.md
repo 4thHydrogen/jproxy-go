@@ -1,6 +1,6 @@
 # JProxy Go
 
-JProxy 的轻量级 Go AI重写版本(**Powered by Codex**)
+JProxy 的轻量级 Go 版本,由AI重写(**Powered by Codex**)
 
 **因为内存实在是太贵了，我实在买不起，就只好重写项目了**
 
