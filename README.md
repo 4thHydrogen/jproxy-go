@@ -1,11 +1,11 @@
 # JProxy Go
 
-JProxy 的轻量级 Go 重写版本，用于 Sonarr/Radarr indexer 查询优化。 
+JProxy 的轻量级 Go AI重写版本(**Powered by Codex**)
 
 **因为内存实在是太贵了，我实在买不起，就只好重写项目了**
 
 ## 致谢
-本项目基于 [LuckyPuppy514/jproxy](https://github.com/LuckyPuppy514/jproxy) 用 Go 语言重写，感谢原作者的贡献。
+本项目基于 [LuckyPuppy514/jproxy](https://github.com/LuckyPuppy514/jproxy) 用 Go 语言重写，感谢原作者的贡献。功能真的很好。
 
 ## 功能特性
 - 参考原项目就好，应该都一比一地实现了
