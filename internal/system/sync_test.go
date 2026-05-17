@@ -2,12 +2,17 @@ package system
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"jproxy/core-proxy/internal/model"
 	"jproxy/core-proxy/internal/repository"
 )
 
@@ -94,5 +99,120 @@ func TestNormalizeTransmissionURL(t *testing.T) {
 	got := normalizeTransmissionURL("http://host:9091/transmission/web/")
 	if got != "http://host:9091/transmission/rpc" {
 		t.Fatalf("unexpected transmission url: %s", got)
+	}
+}
+
+func TestSyncRunSerializesSameJob(t *testing.T) {
+	var active int32
+	var maxActive int32
+	release := make(chan struct{})
+	var once sync.Once
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/v3/series") {
+			http.NotFound(w, r)
+			return
+		}
+		current := atomic.AddInt32(&active, 1)
+		for {
+			previous := atomic.LoadInt32(&maxActive)
+			if current <= previous || atomic.CompareAndSwapInt32(&maxActive, previous, current) {
+				break
+			}
+		}
+		once.Do(func() {
+			time.AfterFunc(50*time.Millisecond, func() {
+				close(release)
+			})
+		})
+		<-release
+		atomic.AddInt32(&active, -1)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer upstream.Close()
+
+	repo, err := NewTempRepo(t)
+	if err != nil {
+		t.Fatalf("temp repo: %v", err)
+	}
+	defer repo.Close()
+	if err := setConfigValues(context.Background(), repo, map[string]string{
+		"sonarrUrl":       upstream.URL,
+		"sonarrApikey":    "abc",
+		"tmdbUrl":         upstream.URL,
+		"tmdbApikey":      "tmdb",
+		"sonarrLanguage1": "zh-CN",
+		"sonarrLanguage2": "en-US",
+	}); err != nil {
+		t.Fatalf("set configs: %v", err)
+	}
+
+	service := NewSyncService(repo, upstream.Client())
+	errs := make(chan error, 2)
+	go func() { errs <- service.Run(context.Background(), "sonarr-title") }()
+	go func() { errs <- service.Run(context.Background(), "sonarr-title") }()
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("sync run: %v", err)
+		}
+	}
+	if got := atomic.LoadInt32(&maxActive); got != 1 {
+		t.Fatalf("sync job overlapped upstream calls, max active = %d", got)
+	}
+}
+
+func TestSyncGetRejectsOversizedResponse(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", maxSyncResponseLength+1)))
+	}))
+	defer upstream.Close()
+
+	service := NewSyncService(nil, upstream.Client())
+	_, err := service.get(context.Background(), upstream.URL)
+	if !errors.Is(err, errSyncResponseTooLarge) {
+		t.Fatalf("expected oversized response error, got %v", err)
+	}
+}
+
+func TestSyncRulesRejectInvalidRegex(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/sonarr@bad.json") {
+			rules := []model.RuleRecord{{
+				ID:          "bad-regex",
+				Token:       "title",
+				Priority:    1,
+				Regex:       "(",
+				Replacement: "",
+				ValidStatus: 1,
+			}}
+			writeJSON(w, rules)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer upstream.Close()
+
+	repo, err := NewTempRepo(t)
+	if err != nil {
+		t.Fatalf("temp repo: %v", err)
+	}
+	defer repo.Close()
+	if err := setConfigValues(context.Background(), repo, map[string]string{
+		"ruleSyncAuthors": "bad",
+	}); err != nil {
+		t.Fatalf("set configs: %v", err)
+	}
+
+	service := NewSyncService(repo, upstream.Client())
+	service.ruleBase = upstream.URL
+	if err := service.SyncSonarrRules(context.Background()); err == nil {
+		t.Fatalf("expected invalid regex to fail sync")
+	}
+	page, err := repo.QueryRules(context.Background(), "sonarr_rule", model.PageQuery{Current: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("query rules: %v", err)
+	}
+	if page.Total != 0 {
+		t.Fatalf("invalid rule was saved: %+v", page.List)
 	}
 }

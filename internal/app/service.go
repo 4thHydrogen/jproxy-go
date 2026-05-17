@@ -17,7 +17,10 @@ import (
 	"jproxy/core-proxy/internal/util"
 )
 
-const maxResponseLength = 4 * 1024 * 1024
+const (
+	maxResponseLength     = 4 * 1024 * 1024
+	maxOffsetCacheEntries = 1024
+)
 
 type Service struct {
 	repo          repository.Repository
@@ -25,6 +28,7 @@ type Service struct {
 	minCount      int
 	offsetMu      sync.Mutex
 	offsetCache   map[string][]int
+	offsetOrder   []string
 	sonarrCatalog []model.SonarrTitle
 	radarrCatalog []model.RadarrTitle
 	catalogMu     sync.RWMutex
@@ -61,6 +65,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 func (s *Service) ResetCaches() {
 	s.offsetMu.Lock()
 	s.offsetCache = map[string][]int{}
+	s.offsetOrder = nil
 	s.offsetMu.Unlock()
 
 	s.catalogMu.Lock()
@@ -555,6 +560,7 @@ func (s *Service) getOffsetList(key string, size int) []int {
 		return append([]int(nil), value...)
 	}
 	result := make([]int, size)
+	s.rememberOffsetKeyLocked(key)
 	s.offsetCache[key] = append([]int(nil), result...)
 	return result
 }
@@ -562,7 +568,20 @@ func (s *Service) getOffsetList(key string, size int) []int {
 func (s *Service) saveOffsetList(key string, offsets []int) {
 	s.offsetMu.Lock()
 	defer s.offsetMu.Unlock()
+	s.rememberOffsetKeyLocked(key)
 	s.offsetCache[key] = append([]int(nil), offsets...)
+}
+
+func (s *Service) rememberOffsetKeyLocked(key string) {
+	if _, ok := s.offsetCache[key]; ok {
+		return
+	}
+	s.offsetOrder = append(s.offsetOrder, key)
+	for len(s.offsetOrder) > maxOffsetCacheEntries {
+		oldest := s.offsetOrder[0]
+		s.offsetOrder = s.offsetOrder[1:]
+		delete(s.offsetCache, oldest)
+	}
 }
 
 func cloneValues(values url.Values) url.Values {
@@ -587,7 +606,10 @@ func atoi(value string) int {
 }
 
 func replaceByRegex(pattern, text, replacement string) (string, bool) {
-	re := regexp.MustCompile(pattern)
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", false
+	}
 	if !re.MatchString(text) {
 		return "", false
 	}
@@ -595,7 +617,11 @@ func replaceByRegex(pattern, text, replacement string) (string, bool) {
 }
 
 func matchRegex(pattern, text string) bool {
-	return regexp.MustCompile("^(?:" + pattern + ")$").MatchString(text)
+	re, err := regexp.Compile("^(?:" + pattern + ")$")
+	if err != nil {
+		return false
+	}
+	return re.MatchString(text)
 }
 
 func looksLikeEmbeddedEnglish(cleanText, cleanTitle, basePattern string) bool {

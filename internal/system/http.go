@@ -1,7 +1,6 @@
 package system
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -100,7 +99,7 @@ func (s *HTTPServer) handleSyncRun(w http.ResponseWriter, r *http.Request) {
 	if job == "" {
 		job = "all"
 	}
-	if err := s.syncer.Run(context.Background(), job); err != nil {
+	if err := s.syncer.Run(r.Context(), job); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}

@@ -17,10 +17,15 @@ import (
 	"jproxy/core-proxy/internal/util"
 )
 
+const maxSyncResponseLength = 16 * 1024 * 1024
+
+var errSyncResponseTooLarge = errors.New("sync response too large")
+
 type SyncService struct {
 	repo        *repository.SQLiteRepository
 	client      *http.Client
 	ruleBase    string
+	runMu       sync.Mutex
 	statusMu    sync.RWMutex
 	statusByJob map[string]model.SyncJobStatus
 }
@@ -47,6 +52,9 @@ func (s *SyncService) Status() []model.SyncJobStatus {
 }
 
 func (s *SyncService) Run(ctx context.Context, job string) error {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+
 	switch job {
 	case "sonarr-title":
 		return s.track(job, s.SyncSonarrTitles)(ctx)
@@ -354,6 +362,10 @@ func (s *SyncService) syncRules(ctx context.Context, table, media string) error 
 			failures = append(failures, err)
 			continue
 		}
+		if err := validateRuleRegexes(rules); err != nil {
+			failures = append(failures, err)
+			continue
+		}
 		if err := s.repo.UpsertRules(ctx, table, rules); err != nil {
 			failures = append(failures, err)
 			continue
@@ -412,7 +424,23 @@ func (s *SyncService) get(ctx context.Context, rawURL string) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("request %s failed: %s", rawURL, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSyncResponseLength+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxSyncResponseLength {
+		return nil, errSyncResponseTooLarge
+	}
+	return body, nil
+}
+
+func validateRuleRegexes(rules []model.RuleRecord) error {
+	for _, rule := range rules {
+		if _, err := regexp.Compile(rule.Regex); err != nil {
+			return fmt.Errorf("invalid regex for rule %s: %w", rule.ID, err)
+		}
+	}
+	return nil
 }
 
 func generateTitleID(base, sno int) int {

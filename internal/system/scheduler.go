@@ -2,9 +2,12 @@ package system
 
 import (
 	"context"
+	"time"
 
 	"github.com/robfig/cron/v3"
 )
+
+const scheduledSyncTimeout = 30 * time.Minute
 
 type Scheduler struct {
 	cron *cron.Cron
@@ -23,7 +26,9 @@ func NewScheduler(syncer *SyncService) *Scheduler {
 	for spec, job := range jobs {
 		jobName := job
 		_, _ = scheduler.cron.AddFunc(spec, func() {
-			_ = syncer.Run(context.Background(), jobName)
+			ctx, cancel := context.WithTimeout(context.Background(), scheduledSyncTimeout)
+			defer cancel()
+			_ = syncer.Run(ctx, jobName)
 		})
 	}
 	return scheduler
@@ -37,5 +42,6 @@ func (s *Scheduler) Stop() {
 	if s == nil || s.cron == nil {
 		return
 	}
-	s.cron.Stop()
+	ctx := s.cron.Stop()
+	<-ctx.Done()
 }

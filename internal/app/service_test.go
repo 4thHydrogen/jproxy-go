@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -209,6 +210,19 @@ func TestGenerateOffsetKeyRemovesOffsetAndApiKey(t *testing.T) {
 	key := generateOffsetKey("/sonarr/jackett/api", "q=abc&apikey=secret&offset=100&limit=50")
 	if strings.Contains(key, "apikey") || strings.Contains(key, "offset=") {
 		t.Fatalf("sensitive fields were not removed: %s", key)
+	}
+}
+
+func TestOffsetCacheIsBounded(t *testing.T) {
+	service := mustService(t, fixtureRepo{})
+	for i := 0; i < maxOffsetCacheEntries+50; i++ {
+		key := "query-" + strconv.Itoa(i)
+		offsets := service.getOffsetList(key, 1)
+		offsets[0] = i
+		service.saveOffsetList(key, offsets)
+	}
+	if got := len(service.offsetCache); got > maxOffsetCacheEntries {
+		t.Fatalf("offset cache grew to %d entries, want at most %d", got, maxOffsetCacheEntries)
 	}
 }
 
